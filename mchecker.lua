@@ -392,12 +392,16 @@ end
 
 temp_hex_data = data 		--get temporary pad of our data 
 op_count = 0 				--reusable count per (complicated) op
+local calls = 0
+local rets = 0
+local popreg = 0
 local _, count = string.gsub(temp_hex_data, "[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]", "")
 print("MOV opcodes: " .. count)
 local _, count = string.gsub(temp_hex_data, "[\xe8\x9a]", "")
 op_count = count
 local _, count = string.gsub(temp_hex_data, "\xff[\x10-\x1f\x50-\x5f\x90-\x9f\xd0-\xdf]", "")
 op_count = op_count + count
+calls = op_count
 print("CALL opcodes: " .. op_count)
 op_count = 0
 local _, count = string.gsub(temp_hex_data, "[\x50-\x57\x6A\x68]", "")
@@ -408,6 +412,7 @@ print("PUSH opcodes: " .. op_count)
 op_count = 0
 local _, count = string.gsub(temp_hex_data, "[\x58-\x5f]", "")
 op_count = count
+popreg = op_count
 local _, count = string.gsub(temp_hex_data, "\x8f[\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]", "")
 op_count = op_count + count
 print("POP opcodes: " .. op_count)
@@ -424,6 +429,24 @@ local _, count = string.gsub(temp_hex_data, "\xcd\x80", "")
 print("INT 80s: " .. count)
 local _, count = string.gsub(temp_hex_data, "\xcd\x21", "")
 print("INT 21s: " .. count)
+local _, count = string.gsub(temp_hex_data, "[\xc3\xcb\xc2\xca]", "")
+rets = count
+
+
+--------------------------------------------------------------------------------------
+--					Call/RET Ballance												--
+--------------------------------------------------------------------------------------
+--Data already harvested from histogram routines
+print("\n\nCALLs: " .. calls .. "\nRETs: " .. rets)
+
+--------------------------------------------------------------------------------------
+--					POP->RET Combo													--
+--------------------------------------------------------------------------------------
+print("\n\nPOPs: " .. popreg)
+print("RETs: " .. rets)
+local _, count = string.gsub(temp_hex_data, "[\x58-\x5f][\xc3\xcb\xc2\xca]", "")
+local poprets = count
+print("POP->RETs: " .. poprets)
 
 --Documentation of Hueristics
 --[[
@@ -443,17 +466,13 @@ Some one-byte histogram stuff (In Progress):
 	Nulls happen to occur frequently in machine code too (very frequently
 	in operands). This heuristic may not be as strong as others.
 
-CALL/RET Balance:
+CALL/RET Balance (DONE):
 	There may be more (maybe much more) Calls than Rets, but the inverse 
 	probably shouldn't be true.
 
-Pop->Ret:
+Pop->Ret  (DONE):
 	This may be compiler specific, but a Ret is typically preceded by a pop
 	to a register
-
-Add rsp, 0xhex -> Ret:
-	This also may be compiler specific, but when the above Pop->Ret pattern
-	isn't the case, this is usually what exists instead
 
 condition_test -> conditional_jmp:
 	This is pretty obvious; if the code is going to do a conditional jump,
@@ -465,7 +484,7 @@ Enumeration of some cmp machine instructions and its variations
 
 	cmp ax, imm16		66 3d XX XX
 	cmp eax, imm32		3d XX XX XX XX
-	cmp rax, imm32		48 3d XX XX XX XX
+	cmp rax, imm32		4X 3d XX XX XX XX
 
 	cmp r/m8, imm8		80 F[8-F] XX			(F8, F9, FA ..etc is al, cl, dl, respectively)
 
@@ -478,10 +497,4 @@ Enumeration of some cmp machine instructions and its variations
 	cmp r/m, r			66? 48? 39 XX
 	cmp r8, r/m8 		3a XX
 	cmp r, r/m 			66? 48? 3b XX
-
-Enumeration of some mov machine instructions and its variations
-88 [0123]X
-88 [4567]X XX
-88 [89ab]X
-88 [cdef]X
 --]]
