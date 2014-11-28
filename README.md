@@ -30,34 +30,81 @@ Example of PDF:
 ![XOR Random](/images/xor3.png)
 
 ###One-Byte Histogram:###
-There are statistically more common opcodes. MOV, PUSH, CALL, POP, CMP, and NOP account for more than half opcodes used. Regarding out of context byte analysis (not dissasembled) we also expect to see a lot of NULLs as well (usually as part of the operands, especially considering leading zero padding for large unsigned integers). Considering that this is not analysis on dissasembled code, the reliability isn't as high as other analysis, but this still provides value.
+There are statistically more common opcodes. MOV, PUSH, CALL, POP, CMP, and NOP account for more than half opcodes used. Regarding out-of-context byte analysis (not dissasembled) we also expect to see a lot of NULLs as well (usually as part of the operands, especially considering leading zero padding for large unsigned integers). Considering that this is not analysis on dissasembled code, the reliability isn't as high as other analysis, but this still provides value. 
+
+For the Linux (Mint 17) examples; all files from $PATH (lots of ELF executables) were analyzed together. For the Windows examples, a search for "Programs" was performed on the whole filesystem and used. For Windows and Linux, these were fresh installs. This was done to give a stronger baseline of what should be expected from this output (and how code and non-code should compare).
+
+Example of Linux 32-bit:
+
+![Histogram](/images/byte4.png)
+
+Example of Linux 64-bit:
+
+![Histogram](/images/byte5.png)
+
+Example of Windows7 32-bit:
+
+![Histogram](/images/byte6.png)
+
+Example of Windows7 64-bit:
+
+![Histogram](/images/byte7.png)
 
 Example of Code:
 
-Example of Non-Code:
+![Histogram](/images/byte1.png)
+
+Example of Random:
+
+![Histogram](/images/byte2.png)
+
+Example of PDF:
+![Histogram](/images/byte3.png)
 
 ###Triple MOV (Working, but unfinished):###
 Not only is the MOV instruction very common, but we tend to see them grouped in chunks. This makes sense though, for example: We want to call a function and the function expects to see arguments on the stack (not uncommon), we usually must MOV these values to some registers before PUSHing them to the stack (this may be an argument for looking for consequtive PUSH's as well). In the case of this hueristic, we look for 3 MOV's in a row
 
-Dumb-Luck Analysis:
-
 Example of Code:
 
-Example of Non-Code:
+![3MOVs](/images/movs1.png)
+
+Example of Random:
+
+![3MOVs](/images/movs2.png)
+
+Example of PDF:
+
+![3MOVs](/images/movs3.png)
 
 ###CALL/RET Balance (Finished):###
 CALL is an operation to essentially call a subroutine, when the code of the subroutine is done, the RET opcode is issued and control is returned to after the CALL was made. If we think about this, Everytime we CALL a subroutine, we "mostly" expect a corresponding RET; we should see about as many CALLs as we see RETs. For whatever reason, we may see more CALLs than RETs for executable code, but to see more RETs than CALLs, this should be seen as unusual (non-code)
 
 Example of Code:
 
-Example of Non-Code:
+![CALLRET](/images/callret1.png)
+
+Example of Random:
+
+![CALLRET](/images/callret2.png)
+
+Example of PDF:
+
+![CALLRET](/images/callret3.png)
 
 ###POP->RET (Finished):###
 This is being seen as unreliable, as it is likely compiler dependent. However, I have noticed that it is atleast somewhat common for RETs to be often preceded by POPs...So I count them.
 
 Example of Code:
 
-Example of Non-Code:
+![POPRET](/images/popret1.png)
+
+Example of Random:
+
+![POPRET](/images/popret2.png)
+
+Example of PDF:
+
+![POPRET](/images/popret3.png)
 
 ###(CMP | TEST) -> (Jcc | MOVcc) (Not Started):###
 This hueristic will take me some time (due to many variations), however, this is likely one of the most reliable (consistent and not compiler dependent) hueristics. It is common for a program to need to do conditional jumps (and sometimes conditional MOVs occur). Before doing a conditional operation, what do we need to do? We need to use an operation that somehow sets important EFLAGS bits (most commonly CMP and TEST).
