@@ -129,7 +129,7 @@ for k,v in sortbyvalue(hashed_bytes, function(t,a,b) return t[b] < t[a] end) do
 	--multibyte ops, prefixes, modifiers, etc... This elseif chain is
 	--deliberately placed in the order you see, based on most common bytes first;
 	--in order to short-circuit. The most common bytes are based on all binary files
-	--from /usr/bin on an ubuntu system.
+	--from $PATH on Linux-Mint x32 and x64
 	if k == "\x00" then hint = "Null or ADD r/m8, r8" formatted_k = "0x00" elseif
 	k == "\x48" then hint = "DEC EAX and Common x64 prefix" elseif
 	k == "\xFF" then hint = "High-Byte or Possible CALL(r/m16/32/64, m16:16, m16:32, m16:64) or PUSH" elseif
