@@ -21,11 +21,11 @@ Example of Code:
 
 ![XOR Code](/images/xor1.png)
 
-Example of Random:
+Example of PDF:
 
 ![XOR Non-Code](/images/xor2.png)
 
-Example of PDF:
+Example of Random:
 
 ![XOR Random](/images/xor3.png)
 
@@ -54,11 +54,11 @@ Example of Code:
 
 ![Histogram](/images/byte1.png)
 
-Example of Random:
+Example of PDF:
 
 ![Histogram](/images/byte2.png)
 
-Example of PDF:
+Example of Random:
 ![Histogram](/images/byte3.png)
 
 ###Triple MOV (Working, but unfinished):###
@@ -68,11 +68,11 @@ Example of Code:
 
 ![3MOVs](/images/movs1.png)
 
-Example of Random:
+Example of PDF:
 
 ![3MOVs](/images/movs2.png)
 
-Example of PDF:
+Example of Random:
 
 ![3MOVs](/images/movs3.png)
 
@@ -83,11 +83,11 @@ Example of Code:
 
 ![CALLRET](/images/callret1.png)
 
-Example of Random:
+Example of PDF:
 
 ![CALLRET](/images/callret2.png)
 
-Example of PDF:
+Example of Random:
 
 ![CALLRET](/images/callret3.png)
 
@@ -98,11 +98,11 @@ Example of Code:
 
 ![POPRET](/images/popret1.png)
 
-Example of Random:
+Example of PDF:
 
 ![POPRET](/images/popret2.png)
 
-Example of PDF:
+Example of Random:
 
 ![POPRET](/images/popret3.png)
 
