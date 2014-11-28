@@ -19,9 +19,15 @@ If we are getting dumb-luck false positives, it's expected to have a even distri
 
 Example of Code:
 
+![XOR Code](/images/xor1.png)
+
 Example of Random:
 
+![XOR Non-Code](/images/xor2.png)
+
 Example of PDF:
+
+![XOR Random](/images/xor3.png)
 
 ###One-Byte Histogram:###
 There are statistically more common opcodes. MOV, PUSH, CALL, POP, CMP, and NOP account for more than half opcodes used. Regarding out of context byte analysis (not dissasembled) we also expect to see a lot of NULLs as well (usually as part of the operands, especially considering leading zero padding for large unsigned integers). Considering that this is not analysis on dissasembled code, the reliability isn't as high as other analysis, but this still provides value.
