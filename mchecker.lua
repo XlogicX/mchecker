@@ -4,6 +4,8 @@ local FILE = (io.open(arg[1], "rb"))	--Open our suspect file (read/binary-mode)
 local data = FILE:read("*all")			--Get all of the data into a scalar
 local length = string.len(data)			--Compute length of file
 
+local fverdict = 0
+
 --Threshholds
 local callret_t = 1 --less than one, unlikely code, more than 1, unsure
 local test_t = 8 --lower is not code, higher is code
@@ -109,6 +111,27 @@ if opts["v"] == true then print(total_xor .. "\tTotal xor reg, reg") end
 if opts["v"] == true then print("\nStatistics:") end
 if opts["v"] == true then print("File Size: " .. length .. " bytes") end
 if opts["r"] == true then print("xor reg, reg to byte ratio: " .. (total_xor/length) * 100) end
+if (
+	((total_xor/length) * 100 > .1) and
+   	((total_xor/length) * 100 < .2)
+	) then
+	fverdict = fverdict + .1
+	if opts["d"] == true then print ("XOR reg, reg: probably code") end
+elseif (
+	((total_xor/length) * 100 > .2) and
+   	((total_xor/length) * 100 < .4)
+	) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("XOR reg, reg: likely code") end
+elseif (
+	((total_xor/length) * 100 > .4)
+	) then
+	fverdict = fverdict + 2
+	if opts["d"] == true then print ("XOR reg, reg: very likely code") end	
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("XOR reg, reg: unlikely code") end
+end
 if opts["r"] == true then print("Accumulator Register to Total Registers ratio: " .. (xor[0] / total_xor) * 100) end
 
 --Get entropy
@@ -901,6 +924,9 @@ if opts["v"] == true then print("Total Unlikely REXes: " .. rexes) end
 --Getting Ratios
 rexes_r = (rexes / length) * 100
 if opts["r"] == true then print("Unlikely REX Metric: " .. rexes_r) end
+
+--Print Final Verdict
+print ("Final Verdict: " .. fverdict)
 
 --]]
 
