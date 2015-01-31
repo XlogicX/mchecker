@@ -4,6 +4,52 @@ local FILE = (io.open(arg[1], "rb"))	--Open our suspect file (read/binary-mode)
 local data = FILE:read("*all")			--Get all of the data into a scalar
 local length = string.len(data)			--Compute length of file
 
+--Threshholds
+local callret_t = 1 --less than one, unlikely code, more than 1, unsure
+local test_t = 8 --lower is not code, higher is code
+local cmp_t = 5 --lower is not code, higher is code
+local check_t = 8 --lower is not code, higher is code
+local fences_t = 5000	--lower than this is not code, higher is ambiguous
+
+--This GetOpt function from: lua-users.org/wiki/AlternativeGetOpt
+function getopt( arg, options )
+  local tab = {}
+  for k, v in ipairs(arg) do
+    if string.sub( v, 1, 2) == "--" then
+      local x = string.find( v, "=", 1, true )
+      if x then tab[ string.sub( v, 3, x-1 ) ] = string.sub( v, x+1 )
+      else      tab[ string.sub( v, 3 ) ] = true
+      end
+    elseif string.sub( v, 1, 1 ) == "-" then
+      local y = 2
+      local l = string.len(v)
+      local jopt
+      while ( y <= l ) do
+        jopt = string.sub( v, y, y )
+        if string.find( options, jopt, 1, true ) then
+          if y < l then
+            tab[ jopt ] = string.sub( v, y+1 )
+            y = l
+          else
+            tab[ jopt ] = arg[ k + 1 ]
+          end
+        else
+          tab[ jopt ] = true
+        end
+        y = y + 1
+      end
+    end
+  end
+  return tab
+end
+
+--[[
+-v verbose
+-r give ratios
+-d give code/not-code/unsure details
+--]]
+opts = getopt( arg, "" )
+
 --------------------------------------------------------------------------------------
 --					XOR REGISTER with ITSELF HUERISTIC								--
 --------------------------------------------------------------------------------------
@@ -19,35 +65,36 @@ local length = string.len(data)			--Compute length of file
 -- 	is not what we are looking for. Also consider the 8/16-bit 66 prefix (66 31 c0), which is
 --	xor ax, ax (also acceptable). Instead of enumerating good prefixes, we do a character class of
 --	'bad' ones. We don't want 41, 43, 44, 46, 49, 4b, 4c, or 4e, doing the same ASCII
---	representation gives us a negated character class of [^ACDFIKLN].
+--	representation gives us a negated character class of [^ACDFIKLN]. Also the 0F Multibyte
+--  sequence has some valid ops that start with 0x3X
 --Overlap
 --	There are many machine-code instructions that translate to identical high-level
 --	Assembly instructions. This is accounted for.
 local temp_hex_data = data 		--get temporary pad of our data 
 local xor = {}
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xc0", "")
+local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xc0", "")
 xor[0] = count
-print(count .. "\txor al/ax/eax/rax/r8b/r8d/r8 with itself")
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xdb", "")
-print(count .. "\txor bl/bx/ebx/rbx/r11b/r11d/r11 with itself")
+if opts["v"] == true then print(count .. "\txor al/ax/eax/rax/r8b/r8d/r8 with itself") end
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xdb", "")
+if opts["v"] == true then print(count .. "\txor bl/bx/ebx/rbx/r11b/r11d/r11 with itself") end
 xor[1] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xc9", "")
-print(count .. "\txor cl/cx/ecx/rcx/r9b/r9d/r9 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xc9", "")
+if opts["v"] == true then print(count .. "\txor cl/cx/ecx/rcx/r9b/r9d/r9 with itself") end
 xor[2] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xd2", "")
-print(count .. "\txor dl/dx/edx/rdx/r10b/r10d/r10 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xd2", "")
+if opts["v"] == true then print(count .. "\txor dl/dx/edx/rdx/r10b/r10d/r10 with itself") end
 xor[3] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xed", "")
-print(count .. "\txor ch/bp/bpl/ebp/rbp/r13b/r13d/r13 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xed", "")
+if opts["v"] == true then print(count .. "\txor ch/bp/bpl/ebp/rbp/r13b/r13d/r13 with itself") end
 xor[4] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xe4", "")
-print(count .. "\txor ah/sp/spl/esp/rsp/r12b/r12d/r12 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xe4", "")
+if opts["v"] == true then print(count .. "\txor ah/sp/spl/esp/rsp/r12b/r12d/r12 with itself") end
 xor[5] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xf6", "")
-print(count .. "\txor dh/si/sil/esi/rsi/r14b/r14d/r14 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xf6", "")
+if opts["v"] == true then print(count .. "\txor dh/si/sil/esi/rsi/r14b/r14d/r14 with itself") end
 xor[6] = count
-local _, count = string.gsub(temp_hex_data, "[^ACDFIKLN][0123]\xff", "")
-print(count .. "\txor bh/di/dil/edi/rdi/r15b/r15d/r15 with itself")
+_, count = string.gsub(temp_hex_data, "[^ACDFIKLN\x0f][0123]\xff", "")
+if opts["v"] == true then print(count .. "\txor bh/di/dil/edi/rdi/r15b/r15d/r15 with itself") end
 xor[7] = count
 
 --Get total instances of xor reg, reg
@@ -57,12 +104,12 @@ for count = 0, 7 do
 	total_xor = total_xor + xor[count]
 end
 
-print(total_xor .. "\tTotal xor reg, reg")
+if opts["v"] == true then print(total_xor .. "\tTotal xor reg, reg") end
 
-print("\nStatistics:")
-print("File Size: " .. length .. " bytes")
-print("xor reg, reg to byte ratio: " .. total_xor/length)
-print("Accumulator Register to Total Registers ratio: " .. xor[0] / total_xor)
+if opts["v"] == true then print("\nStatistics:") end
+if opts["v"] == true then print("File Size: " .. length .. " bytes") end
+if opts["r"] == true then print("xor reg, reg to byte ratio: " .. (total_xor/length) * 100) end
+if opts["r"] == true then print("Accumulator Register to Total Registers ratio: " .. (xor[0] / total_xor) * 100) end
 
 --Get entropy
 local entropy = 0
@@ -72,24 +119,7 @@ for count = 0, 7 do
 	entropy = entropy + xor[count]
 end
 entropy = math.abs(entropy / math.log(2))
-print("Entropy is: " .. entropy)
-
-
-
-
---------------------------------------------------------------------------------------
---					3X MOVs In A Row 												--
---------------------------------------------------------------------------------------
---Not only are MOVs a common instruction, but movs are also usually found in groups.
---This hueristic is not precise; there would be a significant amount of addressing
---schemes to consider for each mov opcode considering both ModR/M and SIB bytes.
---Using this kind of accuracy would also get potentially lost in the code not beeing
---aligned in the first place. We will assume that a MOV instruction typically never
---exceeds 6 bytes after the opcode (taking into account ModR/M, SIB, and operand). We
---will also consider only 1-byte for a prefix (\x66 \x4X, etc...).
-temp_hex_data = data 		--get temporary pad of our data 
-local _, count = string.gsub(temp_hex_data, "[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]..?.?.?.?.?[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]..?.?.?.?.?[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]", "")
-print("Triple-MOV Instructions: " .. count)
+if opts["r"] == true then print("Entropy is: " .. entropy) end
 
 --------------------------------------------------------------------------------------
 --					1-Byte Histostat 												--
@@ -122,14 +152,14 @@ for c in temp_hex_data:gmatch"." do
     end
 end
 
-print("\nByte Count, per-byte distribution should be " .. math.floor(length/256) .. " count.")
-print("Byte","Count","Hint\n-----------------------------------")
+if opts["v"] == true then print("\nByte Count, per-byte distribution should be " .. math.floor(length/256) .. " count.") end
+if opts["v"] == true then print("Byte","Count","Hint\n-----------------------------------") end
 for k,v in sortbyvalue(hashed_bytes, function(t,a,b) return t[b] < t[a] end) do
 	--create 'hints' for each byte. This is as accurate as it can be considering
 	--multibyte ops, prefixes, modifiers, etc... This elseif chain is
 	--deliberately placed in the order you see, based on most common bytes first;
 	--in order to short-circuit. The most common bytes are based on all binary files
-	--from $PATH on Linux-Mint x32 and x64
+	--from /usr/bin on an ubuntu system.
 	if k == "\x00" then hint = "Null or ADD r/m8, r8" formatted_k = "0x00" elseif
 	k == "\x48" then hint = "DEC EAX and Common x64 prefix" elseif
 	k == "\xFF" then hint = "High-Byte or Possible CALL(r/m16/32/64, m16:16, m16:32, m16:64) or PUSH" elseif
@@ -387,7 +417,7 @@ for k,v in sortbyvalue(hashed_bytes, function(t,a,b) return t[b] < t[a] end) do
 	k == "\x9F" then hint = "LAHF" elseif
 	k == "\x9E" then hint = "SAHF" end		
 	formatted_k = string.format('0x%02X ',string.byte(k))
-    print(formatted_k,v,hint)
+    if opts["v"] == true then print(formatted_k,v,hint) end
 end
 
 temp_hex_data = data 		--get temporary pad of our data 
@@ -395,41 +425,41 @@ op_count = 0 				--reusable count per (complicated) op
 local calls = 0
 local rets = 0
 local popreg = 0
-local _, count = string.gsub(temp_hex_data, "[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]", "")
-print("MOV opcodes: " .. count)
-local _, count = string.gsub(temp_hex_data, "[\xe8\x9a]", "")
+_, count = string.gsub(temp_hex_data, "[\x88\x89\x8a\x8b\x8c\x8e\xa0\xa1\xa2\xa3\xb0\xb8\xc6\xc7]", "")
+if opts["v"] == true then print("MOV opcodes: " .. count) end
+_, count = string.gsub(temp_hex_data, "[^\x0f][\xe8\x9a]", "")
 op_count = count
-local _, count = string.gsub(temp_hex_data, "\xff[\x10-\x1f\x50-\x5f\x90-\x9f\xd0-\xdf]", "")
+_, count = string.gsub(temp_hex_data, "[^\xd9]\xff[\x10-\x1f\x50-\x5f\x90-\x9f\xd0-\xdf]", "")
 op_count = op_count + count
 calls = op_count
-print("CALL opcodes: " .. op_count)
+if opts["v"] == true then print("CALL opcodes: " .. op_count) end
 op_count = 0
-local _, count = string.gsub(temp_hex_data, "[\x50-\x57\x6A\x68]", "")
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x50-\x57\x6A\x68]", "")
 op_count = count
-local _, count = string.gsub(temp_hex_data, "\xff[\x30-\x37\x70-\x77\xb0-\xb7\xf0-\xf7]", "")
+_, count = string.gsub(temp_hex_data, "[^\xd9]\xff[\x30-\x37\x70-\x77\xb0-\xb7\xf0-\xf7]", "")
 op_count = op_count + count
-print("PUSH opcodes: " .. op_count)
+if opts["v"] == true then print("PUSH opcodes: " .. op_count) end
 op_count = 0
-local _, count = string.gsub(temp_hex_data, "[\x58-\x5f]", "")
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x58-\x5f]", "")
 op_count = count
 popreg = op_count
-local _, count = string.gsub(temp_hex_data, "\x8f[\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]", "")
+_, count = string.gsub(temp_hex_data, "[^\x0f]\x8f[\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]", "")
 op_count = op_count + count
-print("POP opcodes: " .. op_count)
+if opts["v"] == true then print("POP opcodes: " .. op_count) end
 op_count = 0
-local _, count = string.gsub(temp_hex_data, "[\x3c\x3d\x38\x39\x3a\x3b]", "")
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x3c\x3d\x38\x39\x3a\x3b]", "")
 op_count = count
-local _, count = string.gsub(temp_hex_data, "[\x80\x81\x83][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]", "")
+_, count = string.gsub(temp_hex_data, "[\x80\x81\x83][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]", "")
 op_count = op_count + count
-print("CMP opcodes: " .. op_count)
+if opts["v"] == true then print("CMP opcodes: " .. op_count) end
 op_count = 0
-local _, count = string.gsub(temp_hex_data, "\x90", "")
-print("NOPs: " .. count)
-local _, count = string.gsub(temp_hex_data, "\xcd\x80", "")
-print("INT 80s: " .. count)
-local _, count = string.gsub(temp_hex_data, "\xcd\x21", "")
-print("INT 21s: " .. count)
-local _, count = string.gsub(temp_hex_data, "[\xc3\xcb\xc2\xca]", "")
+_, count = string.gsub(temp_hex_data, "[^\x0F\xF3]\x90", "")
+if opts["v"] == true then print("NOPs: " .. count) end
+_, count = string.gsub(temp_hex_data, "\xcd\x80", "")
+if opts["v"] == true then print("INT 80s: " .. count) end
+_, count = string.gsub(temp_hex_data, "\xcd\x21", "")
+if opts["v"] == true then print("INT 21s: " .. count) end
+_, count = string.gsub(temp_hex_data, "[^\x0f\x01][\xc3\xcb\xc2\xca]", "")
 rets = count
 
 
@@ -437,16 +467,442 @@ rets = count
 --					Call/RET Ballance												--
 --------------------------------------------------------------------------------------
 --Data already harvested from histogram routines
-print("\n\nCALLs: " .. calls .. "\nRETs: " .. rets)
+if opts["v"] == true then print("\n\nCALLs: " .. calls .. "\nRETs: " .. rets) end
+
+--Getting Ratios
+local callret_r = calls / rets
+if opts["r"] == true then print("Call/RET Ratio: " .. callret_r) end
+
+--Desicion making
+if callret_r < callret_t then 
+	if opts["d"] == true then print("Call/RET Verdict: This is unlikely to be code") end 
+else
+	if opts["d"] == true then print("Call/RET Verdict: Unsure") end
+end
 
 --------------------------------------------------------------------------------------
 --					POP->RET Combo													--
 --------------------------------------------------------------------------------------
-print("\n\nPOPs: " .. popreg)
-print("RETs: " .. rets)
-local _, count = string.gsub(temp_hex_data, "[\x58-\x5f][\xc3\xcb\xc2\xca]", "")
+if opts["v"] == true then print("\n\nPOPs: " .. popreg) end
+if opts["v"] == true then print("RETs: " .. rets) end
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x58-\x5f][\xc3\xcb\xc2\xca]", "")
 local poprets = count
-print("POP->RETs: " .. poprets)
+if opts["v"] == true then print("POP->RETs: " .. poprets) end
+
+--Getting Ratios
+local pop_r = (popreg / length) * 100
+local ret_r = (rets / length) * 100
+local popret_r = (poprets / length) * 100
+if opts["r"] == true then print("Pop Ratio: " .. pop_r) end
+if opts["r"] == true then print("Ret Ratio: " .. ret_r) end
+if opts["r"] == true then print("Pop->Ret Ratio: " .. popret_r) end
+
+--------------------------------------------------------------------------------------
+--					TEST/CMP -> Jcc													--
+--------------------------------------------------------------------------------------
+--Simplifications were made when considering the ModR/M and SIB bytes of the TEST or
+--CMP. the 'none' SIB option was never considered, and the need for a SIB byte
+--indicated by the ModR/M was used only for some machine-code implementations. All of
+--these choices were decided by the frequency actually used in observation of real
+--compiled/assembled machine code.
+if opts["v"] == true then print("\n\nConditions with Checks: ") end
+--Jcc's (that would work with TEST)
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x74\x75\x78\x79\x7a\x7b\x7f]", "")
+local testjccs = count
+_, count = string.gsub(temp_hex_data, "[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "")
+testjccs = testjccs + count
+if opts["v"] == true then print("Jcc's (that would have preceding TEST): " .. testjccs) end
+
+--TEST -> Jcc
+_, count = string.gsub(temp_hex_data, "[^\x38\x0f][\xa8].[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --Test(a8) -> Jcc
+local tests = count
+_, count = string.gsub(temp_hex_data, "[^\x38\x0f][\xa8].[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --Test(a8) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38\x0f][\xa9]....[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --test(a9) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38\x0f][\xa9]....[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --test(a9) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[66][\xa9]..[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --test(66 a9) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[66][\xa9]..[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --test (66 a9) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x38\x0f][\xf6][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7].[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --test(f6 /0) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x38\x0f][\xf6][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7].[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --test(f6 /0) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38\x0f][\xf7][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]....[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --test(f7 /0) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38\x0f][\xf7][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]....[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --test(f7 /0) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[66][\xf7][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]..[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --test(66 f7 /0) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[66][\xf7][\x00-\x07\x40-\x47\x80-\x87\xc0-\xc7]..[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --test (66 f7 /0) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^0f][\x84].[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --Test(84) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^0f][\x84].[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --Test(84) -> OF Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^0f][\x85].[\x74\x75\x78\x79\x7a\x7b\x7f]", "") --Test(85) -> Jcc
+tests = tests + count
+_, count = string.gsub(temp_hex_data, "[^0f][\x85].[\x0f][\x84\x85\x88\x89\x8a\x8b\x8f]", "") --Test(85) -> OF Jcc
+tests = tests + count
+
+if opts["v"] == true then print("TEST -> Jcc: " .. tests) end
+
+--a8 XX
+--a9 XX XX XX XX
+--66 a9 XX XX
+--f6 XX XX
+--f7 XX XX XX XX XX
+--66 f6 XX XX XX
+--84 XX
+--85 XX
+
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x70-\x7F]", "")
+local cmpjccs = count
+_, count = string.gsub(temp_hex_data, "[\x0f][\x80-\x8f]", "")
+cmpjccs = cmpjccs + count
+if opts["v"] == true then print("Jcc's (that would have preceding CMP): " .. cmpjccs) end
+--TEST -> Jcc
+_, count = string.gsub(temp_hex_data, "[^38][\x3c].[\x70-\x7F]", "") --Cmp(3c) -> Jcc
+local cmps = count
+_, count = string.gsub(temp_hex_data, "[^38][\x3c].[\x0f][\x80-\x8f]", "") --Cmp(3c) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38][\x3d]....[\x70-\x7F]", "") --Cmp(3d) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x38][\x3d]....[\x0f][\x80-\x8f]", "") --Cmp(3d) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[66][\x3d]..[\x70-\x7F]", "") --Cmp(66 3d) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[66][\x3d]..[\x0f][\x80-\x8f]", "") --Cmp (66 3d) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x80][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff].[\x70-\x7F]", "") --Cmp(80 /7) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x80][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff].[\x0f][\x80-\x8f]", "") --Cmp(80 /7) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x0f][\x81][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]....[\x70-\x7F]", "") --Cmp(81 /7) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x66\x0f][\x81][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]....[\x0f][\x80-\x8f]", "") --Cmp(81 /7) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[66][\x81][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]..[\x70-\x7F]", "") --Cmp(66 81 /7) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[66][\x81][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff]..[\x0f][\x80-\x8f]", "") --Cmp (66 81 /7) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x83][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff].[\x70-\x7F]", "") --Cmp(83 /7) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x83][\x38-\x3f\x78-\x7f\xb8-\xbf\xf8-\xff].[\x0f][\x80-\x8f]", "") --Cmp(83 /7) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x70-\x7F]", "") --Cmp(38) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x0f][\x80-\x8f]", "") --Cmp(38) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x70-\x7F]", "") --Cmp(38/1) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x0f][\x80-\x8f]", "") --Cmp(38/1) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x70-\x7F]", "") --Cmp(38/4) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x0f][\x80-\x8f]", "") --Cmp(38/4) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x70-\x7F]", "") --Cmp(38/2) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x0f][\x80-\x8f]", "") --Cmp(38/2) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x70-\x7F]", "") --Cmp(38/5) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x38][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x0f][\x80-\x8f]", "") --Cmp(38/5) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x70-\x7F]", "") --Cmp(39) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x0f][\x80-\x8f]", "") --Cmp(39) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x70-\x7F]", "") --Cmp(39/1) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x0f][\x80-\x8f]", "") --Cmp(39/1) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x70-\x7F]", "") --Cmp(39/4) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x0f][\x80-\x8f]", "") --Cmp(39/4) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x70-\x7F]", "") --Cmp(39/2) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x0f][\x80-\x8f]", "") --Cmp(39/2) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x70-\x7F]", "") --Cmp(39/5) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x39][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x0f][\x80-\x8f]", "") --Cmp(39/5) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x70-\x7F]", "") --Cmp(3a) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x0f][\x80-\x8f]", "") --Cmp(3a) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x70-\x7F]", "") --Cmp(3a/1) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x0f][\x80-\x8f]", "") --Cmp(3a/1) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x70-\x7F]", "") --Cmp(3a/4) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x0f][\x80-\x8f]", "") --Cmp(3a/4) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x70-\x7F]", "") --Cmp(3a/2) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x0f][\x80-\x8f]", "") --Cmp(3a/2) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x70-\x7F]", "") --Cmp(3a/5) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x3a][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x0f][\x80-\x8f]", "") --Cmp(3a/5) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x70-\x7F]", "") --Cmp(3b) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x00-\x03\x06-\x0b\x0e\x0f\x10-\x13\x16-\x1b\x1e\x1f\x20-\x23\x26-\x2b\x2e\x2f\x30-\x33\x36-\x3b\x3e\x3f\xc0-\xff][\x0f][\x80-\x8f]", "") --Cmp(3b) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x70-\x7F]", "") --Cmp(3b/1) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x40-\x43\x45-\x4b\x4d-\x4f\x50-\x53\x55-\x5b\x5d-\x5f\x60-\x63\x65-\x6b\x6d-\x6f\x70-\x73\x75-\x7b\x7d-\x7f].[\x0f][\x80-\x8f]", "") --Cmp(3b/1) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x70-\x7F]", "") --Cmp(3b/4) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x05\x0d\x15\x1d\x25\x2d\x35\x3d\x80-\x83\x85-\x8b\x8d-\x8f\x90-\x93\x95-\x9b\x9d-\x9f\xa0-\xa3\xa5-\xab\xad-\xaf\xb0-\xb3\xb5-\xbb\xbd-\xbf]....[\x0f][\x80-\x8f]", "") --Cmp(3b/4) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x70-\x7F]", "") --Cmp(3b/2) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x44\x4c\x54\x5c\x64\x6c\x74\x7c]..[\x0f][\x80-\x8f]", "") --Cmp(3b/2) -> OF Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x70-\x7F]", "") --Cmp(3b/5) -> Jcc
+cmps = cmps + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\x84\x8c\x94\x9c\xa4\xac\xb4\xbc].....[\x0f][\x80-\x8f]", "") --Cmp(3b/5) -> OF Jcc
+cmps = cmps + count
+
+if opts["v"] == true then print("CMP -> Jcc: " .. cmps) end
+
+--Getting Ratios
+local test_p = (tests / testjccs) * 100
+local cmp_p = (cmps / cmpjccs) * 100
+local conditional_p = ((cmps + tests) / cmpjccs) * 100
+if opts["r"] == true then print("Test->Jump Ratio: " .. test_p) end
+if opts["r"] == true then print("Cmp->Jump Ratio: " .. cmp_p) end
+if opts["r"] == true then print("Overall Check->Jump Ratio: " .. conditional_p) end
+
+--Desiscion Making
+if test_p < test_t then
+	if opts["d"] == true then print("Test->Jump Verdict: This is unlikely to be code") end 
+else
+	if opts["d"] == true then print("Test->Jump Verdict: This is likely to be code") end
+end
+if cmp_p < cmp_t then
+	if opts["d"] == true then print("Cmp->Jump Verdict: This is unlikely to be code") end 
+else
+	if opts["d"] == true then print("Cmp->Jump Verdict: This is likely to be code") end
+end
+if conditional_p < check_t then
+	if opts["d"] == true then print("Check->Jump Verdict: This is unlikely to be code") end 
+else
+	if opts["d"] == true then print("Check->Jump Verdict: This is likely to be code") end
+end
+
+--egrep ':\s+(4. |66 )?81.+?\scmp\s' all.dump
+--3c XX
+--3d XX XX XX XX
+--66 3d XX XX
+--80 XX XX
+--81 XX XX XX XX XX
+--66 81 XX XX XX
+--83 XX XX
+--38 XX (but not below forms)
+--38 04/0c/14/1c/24/2c/34/3c/40-43/45-4b/4d-4f/50-53/55-5b/5d-5f/60-63/65-6b/6d-6f/70-73/75-7b/7d-7f XX
+--38 05/0d/15/1d/25/2d/35/3d/80-83/85-8b/8d-8f/90-93/95-9b/9d-9f/a0-a3/a5-ab/ad-af/b0-b3/b5-bb/bd-bf XX XX XX XX
+--38 44/4c/54/5c/64/6c/74/7c XX XX
+--38 84/8c/94/9c/a4/ac/b4/bc XX XX XX XX XX
+--39 XX (but not below forms)
+--39 04/0c/14/1c/24/2c/34/3c/40-43/45-4b/4d-4f/50-53/55-5b/5d-5f/60-63/65-6b/6d-6f/70-73/75-7b/7d-7f XX
+--39 05/0d/15/1d/25/2d/35/3d/80-83/85-8b/8d-8f/90-93/95-9b/9d-9f/a0-a3/a5-ab/ad-af/b0-b3/b5-bb/bd-bf XX XX XX XX
+--39 44/4c/54/5c/64/6c/74/7c XX XX
+--39 84/8c/94/9c/a4/ac/b4/bc XX XX XX XX XX
+--3a XX (but not below forms)
+--3a 04/0c/14/1c/24/2c/34/3c/40-43/45-4b/4d-4f/50-53/55-5b/5d-5f/60-63/65-6b/6d-6f/70-73/75-7b/7d-7f XX
+--3a 05/0d/15/1d/25/2d/35/3d/80-83/85-8b/8d-8f/90-93/95-9b/9d-9f/a0-a3/a5-ab/ad-af/b0-b3/b5-bb/bd-bf XX XX XX XX
+--3a 44/4c/54/5c/64/6c/74/7c XX XX
+--3a 84/8c/94/9c/a4/ac/b4/bc XX XX XX XX XX
+--3b XX (but not below forms) (we likely wont see this form, 39 is typically chosen for CMP reg, reg, not an equally valid 3b)
+--3b 04/0c/14/1c/24/2c/34/3c/40-43/45-4b/4d-4f/50-53/55-5b/5d-5f/60-63/65-6b/6d-6f/70-73/75-7b/7d-7f XX
+--3b 05/0d/15/1d/25/2d/35/3d/80-83/85-8b/8d-8f/90-93/95-9b/9d-9f/a0-a3/a5-ab/ad-af/b0-b3/b5-bb/bd-bf XX XX XX XX
+--3b 44/4c/54/5c/64/6c/74/7c XX XX
+--3b 84/8c/94/9c/a4/ac/b4/bc XX XX XX XX XX
+
+--------------------------------------------------------------------------------------
+--					Unlikely Machne Code											--
+--------------------------------------------------------------------------------------
+if opts["v"] == true then print("\n\nUnlikely Fencing: ") end
+_, count = string.gsub(temp_hex_data, "[^\x38\x3A][\x0f][\xae][\xe9-\xef\xf1-\xf7\xf9-\xff]", "") --LFence/MFence/SFence
+local fences = count
+if opts["v"] == true then print("Unlikely Fences " .. fences) end
+local fences_r = length / fences
+if opts["r"] == true then print("Unlikely Fences Metric: " .. fences_r) end
+--Desicion making
+if fences_r < fences_t then 
+	if opts["d"] == true then print("Fence Verdict: This is unlikely to be code") end 
+else
+	if opts["d"] == true then print("Fence Verdict: Unsure") end
+end
+--note that this could also be a valid SCABS op preceded from \x0f data as operand from previous op
+--there are plenty of dumb luck reasons that this could show up.
+
+
+--Unlikely ModR/M (Op R/R) instructions
+if opts["v"] == true then print("\n\nUnlikely ModR/M Combos: ") end
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x32][\xc0-ff]", "") --XOR r8/r8
+if opts["v"] == true then print("XOR r8/r8: " .. count) end
+if opts["r"] == true then print("XOR r8/r8 ratio: " .. count / length) end
+local modrms = count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x33][\xc0-ff]", "") --XOR r32/r32
+if opts["v"] == true then print("XOR r32/r32: " .. count) end
+if opts["r"] == true then print("XOR r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x02][\xc0-ff]", "") --ADD r8/r8
+if opts["v"] == true then print("ADD r8/r8: " .. count) end
+if opts["r"] == true then print("ADD r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x03][\xc0-ff]", "") --ADD r32/r32
+if opts["v"] == true then print("ADD r32/r32: " .. count) end
+if opts["r"] == true then print("ADD r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x22][\xc0-ff]", "") --AND r8/r8
+if opts["v"] == true then print("AND r8/r8: " .. count) end
+if opts["r"] == true then print("AND r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x23][\xc0-ff]", "") --AND r32/r32
+if opts["v"] == true then print("AND r32/r32: " .. count) end
+if opts["r"] == true then print("AND r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x3a][\xc0-ff]", "") --CMP r8/r8
+if opts["v"] == true then print("CMP r8/r8: " .. count) end
+if opts["r"] == true then print("CMP r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\xc0-ff]", "") --CMP r32/r32
+if opts["v"] == true then print("CMP r32/r32: " .. count) end
+if opts["r"] == true then print("CMP r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x8a][\xc0-ff]", "") --MOV r8/r8
+if opts["v"] == true then print("MOV r8/r8: " .. count) end
+if opts["r"] == true then print("MOV r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x0f][\x8b][\xc0-ff]", "") --MOV r32/r32
+if opts["v"] == true then print("MOV r32/r32: " .. count) end
+if opts["r"] == true then print("MOV r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x38\x3a][\x0a][\xc0-ff]", "") --OR r8/r8
+if opts["v"] == true then print("OR r8/r8: " .. count) end
+if opts["r"] == true then print("OR r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x0b][\xc0-ff]", "") --OR r32/r32
+if opts["v"] == true then print("OR r32/r32: " .. count) end
+if opts["r"] == true then print("OR r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+_, count = string.gsub(temp_hex_data, "[^\x38\x0f][\x2a][\xc0-ff]", "") --SUB r8/r8
+if opts["v"] == true then print("SUB r8/r8: " .. count) end
+if opts["r"] == true then print("SUB r8/r8 ratio: " .. count / length) end
+modrms = modrms + count
+_, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x2b][\xc0-ff]", "") --SUB r32/r32
+if opts["v"] == true then print("SUB r32/r32: " .. count) end
+if opts["r"] == true then print("SUB r32/r32 ratio: " .. count / length) end
+modrms = modrms + count
+
+if opts["v"] == true then print("Total Unlikely ModR/M Combos: " .. modrms) end
+--Getting Ratios
+modrms_r = (modrms / length) * 100
+if opts["r"] == true then print("Unlikely ModR/M Metric: " .. modrms_r) end
+
+--Unlikely SIB instructions
+if opts["v"] == true then print("\n\nUnlikely SIB instructions: ") end
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38][\x30-\x33][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --XOR
+if opts["v"] == true then print("XOR 'none' SIB " .. count) end
+if opts["r"] == true then print("XOR SIB ratio: " .. count / length) end
+local sibs = count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x00-\x03][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --ADD
+if opts["v"] == true then print("ADD 'none' SIB " .. count) end
+if opts["r"] == true then print("ADD SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x20-\x23][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --AND
+if opts["v"] == true then print("AND 'none' SIB " .. count) end
+if opts["r"] == true then print("AND SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x38-\x3b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --CMP
+if opts["v"] == true then print("CMP 'none' SIB " .. count) end
+if opts["r"] == true then print("CMP SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f][\x88-\x8b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --MOV
+if opts["v"] == true then print("MOV 'none' SIB " .. count) end
+if opts["r"] == true then print("MOV SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x08-\x0b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --OR
+if opts["v"] == true then print("OR 'none' SIB " .. count) end
+if opts["r"] == true then print("OR SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+_, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38][\x28-\x2b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --SUB
+if opts["v"] == true then print("SUB 'none' SIB " .. count) end
+if opts["r"] == true then print("SUB SIB ratio: " .. count / length) end
+sibs = sibs + count
+
+if opts["v"] == true then print("Total 'none' SIBs: " .. sibs) end
+--Getting Ratios
+sibs_r = (sibs / length) * 100
+if opts["r"] == true then print("'none' SIB Metric: " .. sibs_r) end
+
+--Unlikely REX prefix implementations
+if opts["v"] == true then print("\n\nUnlikely SIB instructions: ") end
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x30\x31][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX XOR " .. count) end
+if opts["r"] == true then print("Unlikely REX XOR ratio: " .. count / length) end
+local rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x00\x01][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX ADD " .. count) end
+if opts["r"] == true then print("Unlikely REX ADD ratio: " .. count / length) end
+rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x20\x21][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX AND " .. count) end
+if opts["r"] == true then print("Unlikely REX AND ratio: " .. count / length) end
+rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x38\x39][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX CMP " .. count) end
+if opts["r"] == true then print("Unlikely REX CMP ratio: " .. count / length) end
+rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x88\x89][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX MOV " .. count) end
+if opts["r"] == true then print("Unlikely REX MOV ratio: " .. count / length) end
+rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x08\x09][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX OR " .. count) end
+if opts["r"] == true then print("Unlikely REX OR ratio: " .. count / length) end
+rexes = count
+
+_, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x28\x29][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
+if opts["v"] == true then print("Unlikely REX SUB " .. count) end
+if opts["r"] == true then print("Unlikely REX SUB ratio: " .. count / length) end
+rexes = count
+
+if opts["v"] == true then print("Total Unlikely REXes: " .. rexes) end
+--Getting Ratios
+rexes_r = (rexes / length) * 100
+if opts["r"] == true then print("Unlikely REX Metric: " .. rexes_r) end
+
+--]]
 
 --Documentation of Hueristics
 --[[
@@ -455,12 +911,7 @@ xor reg, reg (DONE):
 	Prefixes asside, this translates to a 2 byte instruction, instead, for
 	example, a 5 byte mov eax, 0.
 
-Triple Mov (Working):
-	MOV is a very common instruction. It is also very common for mov's to
-	occur in groups. This hueristic would look for any case of 3 mov's in
-	a row
-
-Some one-byte histogram stuff (In Progress):
+Some one-byte histogram stuff (DONE):
 	The 6 most common assembly instructions (accounting for more than half 
 	of instructions actually used) are mov, push, call, pop, cmp, and nop.
 	Nulls happen to occur frequently in machine code too (very frequently
@@ -474,27 +925,17 @@ Pop->Ret  (DONE):
 	This may be compiler specific, but a Ret is typically preceded by a pop
 	to a register
 
-condition_test -> conditional_jmp:
+condition_test -> conditional_jmp (DONE):
 	This is pretty obvious; if the code is going to do a conditional jump,
 	it would make sense for there to be a conditional test preceding it.
-	This may be one of the higher fidelity hueristics here
+	This is the highest fidelity hueristic.
 
-Enumeration of some cmp machine instructions and its variations
-	cmp al, imm8		3c XX
-
-	cmp ax, imm16		66 3d XX XX
-	cmp eax, imm32		3d XX XX XX XX
-	cmp rax, imm32		4X 3d XX XX XX XX
-
-	cmp r/m8, imm8		80 F[8-F] XX			(F8, F9, FA ..etc is al, cl, dl, respectively)
-
-	cmp r/m16, imm16	66 81 F[8-F] XX XX		66 is prefix for 16-bit
-	cmp r/32, imm32		81 F[8-F] XX XX XX XX
-	cmp r/64, imm32		48 81 F[8-F] XX XX XX XX	48 is 64-bit register prefix
-
-	cmp r/m,imm8		66? 48? 83 F[8-F] XX
-	cmp r/m8, r8		48? 38 XX
-	cmp r/m, r			66? 48? 39 XX
-	cmp r8, r/m8 		3a XX
-	cmp r, r/m 			66? 48? 3b XX
+Unlikely Operations:
+	There is redundancy in machine code (30 c0 and 32 c0 are both xor al,al).
+	A compiler must choose one, meaning we should never see the other. I'm
+	not certain whether the above xor example is compiler specific though,
+	so I will stick with "Intel Manual" suggested unlikely redundancies,
+	like the fence redundancy. The idea for this hueristic is you should see
+	a low amount of this metric compared to other random data. A low amount
+	doesn't prove it's code, but a high amount is strong indicator it's not
 --]]
