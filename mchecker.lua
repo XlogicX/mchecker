@@ -7,10 +7,6 @@ local length = string.len(data)			--Compute length of file
 local fverdict = 0
 
 --Threshholds
-local callret_t = 1 --less than one, unlikely code, more than 1, unsure
-local test_t = 8 --lower is not code, higher is code
-local cmp_t = 5 --lower is not code, higher is code
-local check_t = 8 --lower is not code, higher is code
 local fences_t = 5000	--lower than this is not code, higher is ambiguous
 
 --This GetOpt function from: lua-users.org/wiki/AlternativeGetOpt
@@ -111,28 +107,34 @@ if opts["v"] == true then print(total_xor .. "\tTotal xor reg, reg") end
 if opts["v"] == true then print("\nStatistics:") end
 if opts["v"] == true then print("File Size: " .. length .. " bytes") end
 if opts["r"] == true then print("xor reg, reg to byte ratio: " .. (total_xor/length) * 100) end
-if (
-	((total_xor/length) * 100 > .1) and
-   	((total_xor/length) * 100 < .2)
-	) then
+--Confidence checking
+if ((total_xor/length) * 100 > .1) and ((total_xor/length) * 100 < .2) then
 	fverdict = fverdict + .1
-	if opts["d"] == true then print ("XOR reg, reg: probably code") end
-elseif (
-	((total_xor/length) * 100 > .2) and
-   	((total_xor/length) * 100 < .4)
-	) then
+	if opts["d"] == true then print ("XOR reg, reg: maybe code") end
+elseif ((total_xor/length) * 100 > .2) and ((total_xor/length) * 100 < .4) then
 	fverdict = fverdict + 1
-	if opts["d"] == true then print ("XOR reg, reg: likely code") end
-elseif (
-	((total_xor/length) * 100 > .4)
-	) then
+	if opts["d"] == true then print ("XOR reg, reg: probably code") end
+elseif ((total_xor/length) * 100 > .4) then
 	fverdict = fverdict + 2
 	if opts["d"] == true then print ("XOR reg, reg: very likely code") end	
 else 
 	fverdict = fverdict - .1
 	if opts["d"] == true then print ("XOR reg, reg: unlikely code") end
 end
+
 if opts["r"] == true then print("Accumulator Register to Total Registers ratio: " .. (xor[0] / total_xor) * 100) end
+--Confidence checking
+if ((xor[0] / total_xor) * 100 > 20) and ((xor[0] / total_xor) * 100 < 40) then
+	fverdict = fverdict + .1
+	if opts["d"] == true then print ("XOR A vs X: maybe code") end
+elseif ((xor[0] / total_xor) * 100 > 40) and ((xor[0] / total_xor) * 100 < 120) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("XOR A vs X: probably code") end
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("XOR A vs X: unlikely code") end
+end
+
 
 --Get entropy
 local entropy = 0
@@ -143,6 +145,20 @@ for count = 0, 7 do
 end
 entropy = math.abs(entropy / math.log(2))
 if opts["r"] == true then print("Entropy is: " .. entropy) end
+--Confidence checking
+if ((entropy > 2) and (entropy < 2.7)) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("entropy: probably code") end
+elseif ((entropy > 1.5) and (entropy < 2)) then
+	fverdict = fverdict + .1
+	if opts["d"] == true then print ("entropy: maybe code") end
+elseif (entropy > 2.9) then
+	fverdict = fverdict - 2
+	if opts["d"] == true then print ("entropy: very unlikely to be code") end	
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("entropy: unlikely code") end
+end
 
 --------------------------------------------------------------------------------------
 --					1-Byte Histostat 												--
@@ -496,11 +512,19 @@ if opts["v"] == true then print("\n\nCALLs: " .. calls .. "\nRETs: " .. rets) en
 local callret_r = calls / rets
 if opts["r"] == true then print("Call/RET Ratio: " .. callret_r) end
 
---Desicion making
-if callret_r < callret_t then 
-	if opts["d"] == true then print("Call/RET Verdict: This is unlikely to be code") end 
-else
-	if opts["d"] == true then print("Call/RET Verdict: Unsure") end
+--Confidence checking
+if ((callret_r > 2) and (callret_r < 6)) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("Call->Ret: very likely code") end
+elseif ((callret_r > 1) and (callret_r < 2)) then
+	fverdict = fverdict + .1
+	if opts["d"] == true then print ("Call->Ret: maybe code") end
+elseif (callret_r < 1) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("Call->Ret: unlikely to be code") end	
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("Call->Ret: unlikely to be code") end
 end
 
 --------------------------------------------------------------------------------------
@@ -519,6 +543,44 @@ local popret_r = (poprets / length) * 100
 if opts["r"] == true then print("Pop Ratio: " .. pop_r) end
 if opts["r"] == true then print("Ret Ratio: " .. ret_r) end
 if opts["r"] == true then print("Pop->Ret Ratio: " .. popret_r) end
+
+--Confidence checking
+if ((pop_r > .01) and (pop_r < 2)) then
+	fverdict = fverdict + .5
+	if opts["d"] == true then print ("POP ratio: likely code") end
+elseif (pop_r > 4) then
+	fverdict = fverdict - .5
+	if opts["d"] == true then print ("POP ratio: unlikely code") end	
+else 
+	if opts["d"] == true then print ("POP ratio: unsure") end
+end
+
+--Confidence checking
+if ((ret_r > .05) and (ret_r < 1)) then
+	fverdict = fverdict + .5
+	if opts["d"] == true then print ("Ret ratio: likely code") end
+elseif (ret_r > 1.3) then
+	fverdict = fverdict - .5
+	if opts["d"] == true then print ("Ret ratio: unlikely code") end	
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("Ret ratio: unlikely code") end
+end
+
+--Confidence checking
+if ((popret_r > .06) and (popret_r < 1)) then
+	fverdict = fverdict + .5
+	if opts["d"] == true then print ("Pop->Ret: probably code") end
+elseif ((popret_r > .1) and (popret_r < .15)) then
+	fverdict = fverdict + .8
+	if opts["d"] == true then print ("Pop->Ret: likely code") end
+elseif (popret_r > .15) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("Pop->Ret: very likely code") end	
+else 
+	fverdict = fverdict - .1
+	if opts["d"] == true then print ("Pop->Ret: unlikely to be code") end
+end
 
 --------------------------------------------------------------------------------------
 --					TEST/CMP -> Jcc													--
@@ -706,21 +768,46 @@ if opts["r"] == true then print("Test->Jump Ratio: " .. test_p) end
 if opts["r"] == true then print("Cmp->Jump Ratio: " .. cmp_p) end
 if opts["r"] == true then print("Overall Check->Jump Ratio: " .. conditional_p) end
 
---Desiscion Making
-if test_p < test_t then
-	if opts["d"] == true then print("Test->Jump Verdict: This is unlikely to be code") end 
-else
-	if opts["d"] == true then print("Test->Jump Verdict: This is likely to be code") end
+--local test_t = 8 --lower is not code, higher is code
+--local cmp_t = 5 --lower is not code, higher is code
+--local check_t = 8 --lower is not code, higher is code
+
+
+--Confidence checking
+if ((test_p > 5) and (test_p < 10)) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("Test->Jump: probably code") end
+elseif ((test_p > 10) and (test_p < 15)) then
+	fverdict = fverdict + 2
+	if opts["d"] == true then print ("Test->Jump: likely code") end
+elseif (test_p > 15) then
+	fverdict = fverdict + 3
+	if opts["d"] == true then print ("Test->Jump: very likely code") end	
+else 
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("Test->Jump: unlikely to be code") end
 end
-if cmp_p < cmp_t then
-	if opts["d"] == true then print("Cmp->Jump Verdict: This is unlikely to be code") end 
+
+--Confidence checking
+if ((cmp_p > 5) and (cmp_p < 10)) then
+	fverdict = fverdict + .5
+	if opts["d"] == true then print ("Cmp->Jump: maybe code") end
+elseif ((cmp_p > 10) and (cmp_p < 15)) then
+	fverdict = fverdict + .8
+	if opts["d"] == true then print ("Cmp->Jump: likely code") end
 else
-	if opts["d"] == true then print("Cmp->Jump Verdict: This is likely to be code") end
+	if opts["d"] == true then print ("Cmp->Jump: unsure") end
 end
-if conditional_p < check_t then
-	if opts["d"] == true then print("Check->Jump Verdict: This is unlikely to be code") end 
-else
-	if opts["d"] == true then print("Check->Jump Verdict: This is likely to be code") end
+
+--Confidence checking
+if (conditional_p > 10) then
+	fverdict = fverdict + 1
+	if opts["d"] == true then print ("Check->Jump: likely code") end
+elseif (conditional_p < 5) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("Check->Jump: unlikely code") end	
+else 						
+	if opts["d"] == true then print ("Check->Jump: unsure") end
 end
 
 --egrep ':\s+(4. |66 )?81.+?\scmp\s' all.dump
@@ -761,11 +848,13 @@ local fences = count
 if opts["v"] == true then print("Unlikely Fences " .. fences) end
 local fences_r = length / fences
 if opts["r"] == true then print("Unlikely Fences Metric: " .. fences_r) end
---Desicion making
-if fences_r < fences_t then 
-	if opts["d"] == true then print("Fence Verdict: This is unlikely to be code") end 
+
+--Confidence checking
+if (fences_r < 5000000) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("Fences: unlikely code") end	
 else
-	if opts["d"] == true then print("Fence Verdict: Unsure") end
+	if opts["d"] == true then print ("Fences: unsure") end
 end
 --note that this could also be a valid SCABS op preceded from \x0f data as operand from previous op
 --there are plenty of dumb luck reasons that this could show up.
@@ -776,12 +865,27 @@ if opts["v"] == true then print("\n\nUnlikely ModR/M Combos: ") end
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x32][\xc0-ff]", "") --XOR r8/r8
 if opts["v"] == true then print("XOR r8/r8: " .. count) end
 if opts["r"] == true then print("XOR r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0001) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("XOR r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("XOR r8/r8: unsure") end
+end
 local modrms = count
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x33][\xc0-ff]", "") --XOR r32/r32
 if opts["v"] == true then print("XOR r32/r32: " .. count) end
 if opts["r"] == true then print("XOR r32/r32 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .003) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("XOR r32/r32: unlikely code") end	
+else
+	if opts["d"] == true then print ("XOR r32/r32: unsure") end
+end
 modrms = modrms + count
 
+--Not using this data in decision making; theory ~= practice
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x02][\xc0-ff]", "") --ADD r8/r8
 if opts["v"] == true then print("ADD r8/r8: " .. count) end
 if opts["r"] == true then print("ADD r8/r8 ratio: " .. count / length) end
@@ -794,51 +898,104 @@ modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x22][\xc0-ff]", "") --AND r8/r8
 if opts["v"] == true then print("AND r8/r8: " .. count) end
 if opts["r"] == true then print("AND r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .000085) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("AND r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("AND r8/r8: unsure") end
+end
 modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x23][\xc0-ff]", "") --AND r32/r32
 if opts["v"] == true then print("AND r32/r32: " .. count) end
 if opts["r"] == true then print("AND r32/r32 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .000025) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("AND r32/r32: unlikely code") end	
+else
+	if opts["d"] == true then print ("AND r32/r32: unsure") end
+end
 modrms = modrms + count
 
 _, count = string.gsub(temp_hex_data, "[^\x0f][\x3a][\xc0-ff]", "") --CMP r8/r8
 if opts["v"] == true then print("CMP r8/r8: " .. count) end
 if opts["r"] == true then print("CMP r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .000058) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("CMP r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("CMP r8/r8: unsure") end
+end
 modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x38][\x3b][\xc0-ff]", "") --CMP r32/r32
 if opts["v"] == true then print("CMP r32/r32: " .. count) end
 if opts["r"] == true then print("CMP r32/r32 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .00005) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("CMP r32/r32: unlikely code") end	
+else
+	if opts["d"] == true then print ("CMP r32/r32: unsure") end
+end
 modrms = modrms + count
 
 _, count = string.gsub(temp_hex_data, "[^\x0f][\x8a][\xc0-ff]", "") --MOV r8/r8
 if opts["v"] == true then print("MOV r8/r8: " .. count) end
 if opts["r"] == true then print("MOV r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .000022) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("MOV r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("MOV r8/r8: unsure") end
+end
 modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x0f][\x8b][\xc0-ff]", "") --MOV r32/r32
 if opts["v"] == true then print("MOV r32/r32: " .. count) end
 if opts["r"] == true then print("MOV r32/r32 ratio: " .. count / length) end
+--Not using this data in decision making; theory ~= practice
 modrms = modrms + count
 
 _, count = string.gsub(temp_hex_data, "[^\x38\x3a][\x0a][\xc0-ff]", "") --OR r8/r8
 if opts["v"] == true then print("OR r8/r8: " .. count) end
 if opts["r"] == true then print("OR r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0002) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("OR r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("OR r8/r8: unsure") end
+end
 modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38\x3A][\x0b][\xc0-ff]", "") --OR r32/r32
 if opts["v"] == true then print("OR r32/r32: " .. count) end
 if opts["r"] == true then print("OR r32/r32 ratio: " .. count / length) end
+--Not using this data in decision making; theory ~= practice
 modrms = modrms + count
 
 _, count = string.gsub(temp_hex_data, "[^\x38\x0f][\x2a][\xc0-ff]", "") --SUB r8/r8
 if opts["v"] == true then print("SUB r8/r8: " .. count) end
 if opts["r"] == true then print("SUB r8/r8 ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0001) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("SUB r8/r8: unlikely code") end	
+else
+	if opts["d"] == true then print ("SUB r8/r8: unsure") end
+end
 modrms = modrms + count
 _, count = string.gsub(temp_hex_data, "[^\x0f\x38][\x2b][\xc0-ff]", "") --SUB r32/r32
 if opts["v"] == true then print("SUB r32/r32: " .. count) end
 if opts["r"] == true then print("SUB r32/r32 ratio: " .. count / length) end
+--Not using this data in decision making; theory ~= practice
 modrms = modrms + count
 
 if opts["v"] == true then print("Total Unlikely ModR/M Combos: " .. modrms) end
 --Getting Ratios
 modrms_r = (modrms / length) * 100
+--Not using this data in decision making due to granual metric usage above
 if opts["r"] == true then print("Unlikely ModR/M Metric: " .. modrms_r) end
 
 --Unlikely SIB instructions
@@ -846,45 +1003,105 @@ if opts["v"] == true then print("\n\nUnlikely SIB instructions: ") end
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38][\x30-\x33][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --XOR
 if opts["v"] == true then print("XOR 'none' SIB " .. count) end
 if opts["r"] == true then print("XOR SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .001) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("XOR SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("XOR SIB: unsure") end
+end
 local sibs = count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x00-\x03][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --ADD
 if opts["v"] == true then print("ADD 'none' SIB " .. count) end
 if opts["r"] == true then print("ADD SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .002) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("ADD SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("ADD SIB: unsure") end
+end
 sibs = sibs + count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x20-\x23][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --AND
 if opts["v"] == true then print("AND 'none' SIB " .. count) end
 if opts["r"] == true then print("AND SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .002) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("AND SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("AND SIB: unsure") end
+end
 sibs = sibs + count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x38-\x3b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --CMP
 if opts["v"] == true then print("CMP 'none' SIB " .. count) end
 if opts["r"] == true then print("CMP SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0005) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("CMP SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("CMP SIB: unsure") end
+end
 sibs = sibs + count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f][\x88-\x8b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --MOV
 if opts["v"] == true then print("MOV 'none' SIB " .. count) end
 if opts["r"] == true then print("MOV SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0003) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("MOV SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("MOV SIB: unsure") end
+end
 sibs = sibs + count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38\x3a][\x08-\x0b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --OR
 if opts["v"] == true then print("OR 'none' SIB " .. count) end
 if opts["r"] == true then print("OR SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0002) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("OR SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("OR SIB: unsure") end
+end
 sibs = sibs + count
 
 _, count = string.gsub(temp_hex_data, "[^\x40-4f\x0f\x38][\x28-\x2b][\x04\x0c\x14\x1c\x24\x2c\x34\x3c\x44\x4c\x54\x5c\x64\x6c\x74\x7c\x84\x8c\x94\x9c\xa4\xac\xb4\xbc][\x60-\x67\xa0-\xa7\xe0-\xe7]", "") --SUB
 if opts["v"] == true then print("SUB 'none' SIB " .. count) end
 if opts["r"] == true then print("SUB SIB ratio: " .. count / length) end
+--Confidence checking
+if ((count / length) > .0005) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("SUB SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("SUB SIB: unsure") end
+end
 sibs = sibs + count
 
 if opts["v"] == true then print("Total 'none' SIBs: " .. sibs) end
 --Getting Ratios
 sibs_r = (sibs / length) * 100
 if opts["r"] == true then print("'none' SIB Metric: " .. sibs_r) end
+--Confidence checking
+if ((count / length) > .25) then
+	fverdict = fverdict - 1
+	if opts["d"] == true then print ("SIB: unlikely code") end	
+else
+	if opts["d"] == true then print ("SIB: unsure") end
+end
 
 --Unlikely REX prefix implementations
-if opts["v"] == true then print("\n\nUnlikely SIB instructions: ") end
+--Not using this data in decision making. Although there are noticable patterns, these patterns didn't match up
+--with theory. There is most likely a logical reason for why these results appear. Even though the patterns are
+--consistent; I only want to use hueristics that I can explain the results of. These hueristics are left in this
+--script for reporting, however.
+if opts["v"] == true then print("\n\nUnlikely XOR instructions: ") end
 _, count = string.gsub(temp_hex_data, "[\x40\x42\x48\x4a][\x30\x31][\xc0-\xc3\xc8-\xcb\xd0-\xd3\xd8-\xdb]", "") --XOR
 if opts["v"] == true then print("Unlikely REX XOR " .. count) end
 if opts["r"] == true then print("Unlikely REX XOR ratio: " .. count / length) end
@@ -926,7 +1143,29 @@ rexes_r = (rexes / length) * 100
 if opts["r"] == true then print("Unlikely REX Metric: " .. rexes_r) end
 
 --Print Final Verdict
-print ("Final Verdict: " .. fverdict)
+--Each range of output difference are based on standard deviation ranges. 500 sample files were used to get this
+--data; half were x86/64 programs and the other half were various files (non-x86/64).
+fverdict = fverdict - 1.5 --normalization
+
+if (fverdict > 9.16) then
+	print ("Final Verdict: Very Likely Code (" .. fverdict .. ")")
+elseif ((fverdict > 7.33) and (fverdict <= 9.16)) then
+	print("Final Verdict: Likely Code (" .. fverdict .. ")")
+elseif ((fverdict > 5.5) and (fverdict <= 7.33)) then
+	print("Final Verdict: Probably Code (" .. fverdict .. ")")
+elseif ((fverdict > 3.7) and (fverdict <= 5.5)) then
+	print("Final Verdict: Maybe Code (" .. fverdict .. ")")
+elseif ((fverdict > 0) and (fverdict <= 3.7)) then
+	print("Final Verdict: Unsure, Code? (" .. fverdict .. ")")
+elseif ((fverdict > -1.27) and (fverdict <= 0)) then
+	print("Final Verdict: Maybe NonCode (" .. fverdict .. ")")
+elseif ((fverdict > -3.61) and (fverdict <= -1.27)) then
+	print("Final Verdict: Probably NonCode (" .. fverdict .. ")")
+elseif ((fverdict > -5.94) and (fverdict <= 3.61)) then
+	print("Final Verdict: Likely NonCode (" .. fverdict .. ")")
+else
+	print ("Final Verdict: Very Likely NonCode (" .. fverdict .. ")")
+end
 
 --]]
 
